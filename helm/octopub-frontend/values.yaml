@@ -21,7 +21,7 @@ image:
   repository: octopussamples/octopub-frontend
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: ""
+  tag: "20260324.583.1"
 
 network:
   port: 8080

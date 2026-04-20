@@ -4,7 +4,7 @@ metadata:
   name: octopub-development
   namespace: flux-system
 spec:
-  path: "./kustomize/envs/Development"
+  path: "./manifests/environments/development"
   sourceRef:
     kind: GitRepository
     name: octopub
