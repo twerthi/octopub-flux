@@ -1,0 +1,10 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: octopub-frontend-development
+  namespace: flux-system
+spec:
+  interval: 1m
+  url: https://github.com/twerthi/octopub-flux/manifests/environments/development/
+  ref:
+    branch: main
