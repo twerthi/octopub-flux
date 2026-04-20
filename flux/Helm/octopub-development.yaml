@@ -1,0 +1,15 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: octopub-frontend
+  namespace: flux-system
+spec:
+  interval: 1m
+  chart:
+    spec:
+      chart: ./helm/octopub-frontend  # Path relative to repo root
+      sourceRef:
+        kind: GitRepository
+        name: octopub
+        namespace: flux-system
+  targetNamespace: development
