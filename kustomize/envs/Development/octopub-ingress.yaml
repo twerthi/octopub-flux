@@ -1,7 +1,7 @@
 - op: replace
   path: /spec/rules/0/host
-  value: "#{Project.Ingress.HostName}"
+  value: "octopub.local"
 
 - op: replace
   path: /spec/ingressClassName
-  value: "#{Project.Ingress.ClassName}"
+  value: "traefik"

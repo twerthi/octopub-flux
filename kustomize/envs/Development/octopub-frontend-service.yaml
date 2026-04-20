@@ -1,6 +1,6 @@
 - op: replace
   path: /spec/ports/0/port
-  value: #{Project.Frontend.Port}
+  value: 8080
 - op: replace
   path: /spec/ports/0/targetPort
-  value: #{Project.Frontend.TargetPort}
+  value: 8080
