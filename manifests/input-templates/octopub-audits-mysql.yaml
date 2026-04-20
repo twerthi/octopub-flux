@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: octopub-audit-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      component: auditservice
+  template:
+    metadata:
+      labels:
+        component: auditservice
+    spec:
+      containers:
+        - name: auditservice
+          image: #{Octopus.Action.Package[octopub-audit-microservice-mysql].Registry}/#{Octopus.Action.Package[octopub-audit-microservice-mysql].PackageId}:#{Octopus.Action.Package[octopub-audit-microservice-mysql].PackageVersion}
+          ports:
+            - name: http-audit
+              containerPort: 10000
+          env:
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: database-credentials
+                  key: database-password
+            - name: DATABASE_HOSTNAME
+              value: "#{MySQL.Server.Name}"
+            - name: DATABASE_PORT
+              value: "#{MySQL.Server.Port}"
+            - name: DATABASE_NAME
+              value: "octopub_clusterpi_#{Octopus.Environment.Name}"
+            - name: DATABASE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: database-credentials
+                  key: database-user
+            - name: MIGRATE_AT_START
+              value: "#{Project.EnvironmentVariable.MigrateAtStart}"
+            - name: COGNITO_DISABLE_AUTH
+              value: "#{Project.EnvironmentVariables.CognitoDisableAuth}"

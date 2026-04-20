@@ -1,0 +1,222 @@
+name: Docker Build and Push
+description: Build the Java microservice 
+inputs:
+  run_number:
+    required: true
+    description: The GitHub Actions Workflow run number
+  github_repo:
+    description: 'The github repo'
+    required: true
+  github_token:
+    description: 'The github token'
+    required: true
+  dockerhub_username:
+    description: 'The dockerhub username'
+    required: true
+  dockerhub_password:
+    description: 'The dockerhub password'
+    required: true
+  service_directory:
+    description: 'The directory holding the microservice'
+    required: true
+  lambda_build:
+    description: 'Whether to build the lambda executable or not'
+    required: true
+    default: true
+  postman_build:
+    description: 'Whether to build the postman test'
+    required: true
+    default: true
+  liquibase_build:
+    description: 'Whether to build the liquibase packages'
+    required: true
+    default: true
+  docker_build:
+    description: 'Whether to build the docker images'
+    required: true
+    default: true
+  systemd_build:
+    description: 'Whether to build the systemd packages'
+    required: true
+    default: true
+  run_tests:
+    description: 'Whether to run tests'
+    required: true
+    default: true
+  codefresh_token:
+    description: 'The codefresh token'
+    required: true
+  github_codefresh_token:
+    description: 'The github codefresh token'
+    required: true
+  octopus_server_url:
+    description: 'The octopus server url'
+    required: true
+  octopus_api_key:
+    description: 'The octopus api key'
+    required: true
+  octopus_space:
+    description: 'The octopus space'
+    required: true    
+
+runs:
+  using: "composite"
+
+  steps:
+    - name: Clone code repo
+      uses: actions/checkout@v2
+
+    - name: Get branch name
+      id: branch-name
+      uses: tj-actions/branch-names@v7
+
+    - name: Install GitVersion
+      uses: gittools/actions/gitversion/setup@v0.9.15
+      with:
+        versionSpec: 5.x
+
+    # - id: determine_version
+    #   name: Determine Version
+    #   uses: gittools/actions/gitversion/execute@v0.9.15
+    #   with:
+    #     additionalArguments: /overrideconfig mode=Mainline
+
+    - name: Set Version
+      run: echo "PACKAGE_VERSION=$(date +'%Y.%m.%d').$GITHUB_RUN_NUMBER" >> $GITHUB_ENV
+      shell: bash
+
+
+    - name: Set up JDK 1.17
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: adopt
+        cache: 'maven'
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: linux/amd64,linux/arm64
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to DockerHub
+      if: ${{ inputs.docker_build == 'true' }}
+      uses: docker/login-action@v2
+      with:
+        username: ${{ inputs.dockerhub_username }}
+        password: ${{ inputs.dockerhub_password }}
+
+    - uses: DeLaGuardo/setup-graalvm@4.0
+      with:
+        graalvm: '22.3.2'
+        java: 'java17'
+        arch: 'amd64'
+
+    - name: Install native-image component
+      run: gu install native-image
+      shell: bash
+
+    - name: Checkstyle
+      run: |
+        chmod +x ./mvnw
+        ./mvnw --batch-mode checkstyle:check
+      shell: bash
+      working-directory: java
+
+    - name: Install modules
+      run: |
+        chmod +x ./mvnw
+        ./mvnw --batch-mode install -DskipTests
+      shell: bash
+      working-directory: java
+
+    - name: Update resources
+      if: ${{ inputs.run_tests == 'true' && steps.branch-name.outputs.current_branch == 'main' }}
+      uses: test-room-7/action-update-file@v1.6.0
+      with:
+        file-path: |
+          .github/badges/microservice-utils.svg
+          .github/badges/microservice-utils-branches.svg
+        commit-msg: Update badges
+        github-token: ${{ inputs.github_token }}
+
+    # This step generates a Source Bill of Materials (SBOM) package that captures all the dependencies compiled
+    # into the application.
+    - name: Generate SBOM
+      run: |
+        chmod +x ./mvnw
+        ./mvnw cyclonedx:makeAggregateBom -DskipTests --no-transfer-progress --batch-mode
+      shell: bash
+      working-directory: java
+
+     # Rebuild the app to support a MySQL database
+    - name: Build MySQL version with Maven
+      run: |
+        chmod +x ./mvnw
+        ./mvnw --batch-mode package --file pom.xml -DskipTests -Dquarkus.profile=mysql
+      shell: bash
+      working-directory: java/${{ inputs.service_directory }}
+
+    # The MySQL Docker multi-arch image is built and pushed.
+    - name: Build, tag, and push image to Dockerhub
+      if: ${{ inputs.docker_build == 'true' }}
+      run: |
+        docker buildx build -f src/main/docker/Dockerfile.legacy-jar -t twerthi/octopub-${{ inputs.service_directory }}-mysql:${{ env.PACKAGE_VERSION }} -t twerthi/octopub-${{ inputs.service_directory }}-mysql:latest --platform=linux/amd64,linux/arm64 --push .
+      shell: bash
+      working-directory: java/${{ inputs.service_directory }}
+
+     # The MySQL Docker image is built and pushed.
+    # - name: Build, tag, and push image to Dockerhub
+    #   if: ${{ inputs.docker_build == 'true' }}
+    #   run: |
+    #     docker build -f src/main/docker/Dockerfile.legacy-jar -t twerthi/octopub-${{ inputs.service_directory }}-mysql:${{ steps.determine_version.outputs.semVer }} .
+    #     docker push twerthi/octopub-${{ inputs.service_directory }}-mysql:${{ steps.determine_version.outputs.semVer }}
+    #     docker tag  twerthi/octopub-${{ inputs.service_directory }}-mysql:${{ steps.determine_version.outputs.semVer }} twerthi/octopub-${{ inputs.service_directory }}-mysql:latest
+    #     docker push twerthi/octopub-${{ inputs.service_directory }}-mysql:latest
+    #   shell: bash
+    #   working-directory: java/${{ inputs.service_directory }}
+
+    # - name: report image by action
+    #   with:
+    #     # Name of runtime to implement the enrichment
+    #     CF_RUNTIME_NAME: 'codefresh-local-k3s'
+
+    #     # Codefresh API key !! Committing a plain text token is a security risk. We highly recommend using encrypted secrets. !!
+    #     # Documentation - https://docs.github.com/en/actions/security-guides/encrypted-secrets
+    #     CF_API_KEY: ${{ inputs.codefresh_token }}
+
+    #     # Name of Container registry integration
+    #     CF_CONTAINER_REGISTRY_INTEGRATION: 'twerthi-dockerhub'
+
+    #     # The git branch which is related for the commit
+    #     #CF_GIT_BRANCH: ${{ github.ref_name }}
+    #     CF_GIT_BRANCH: "test-pr"
+
+    #     # Image path to enrich 
+    #     CF_IMAGE: docker.io/${{ inputs.dockerhub_username }}/octopub-${{ inputs.service_directory }}-mysql:${{ env.PACKAGE_VERSION }}
+
+    #     # GitHub Access token !! Committing a plain text token is a security risk. We highly recommend using encrypted secrets. !!
+    #     # Documentation - https://docs.github.com/en/actions/security-guides/encrypted-secrets
+    #     CF_GITHUB_TOKEN: ${{ inputs.github_codefresh_token }}    
+
+    #     # # Name of Jira integration
+    #     CF_ISSUE_TRACKING_INTEGRATION: 'twerthi-jira' 
+
+    #     # # String starting with the issue ID to associate with image
+    #     CF_JIRA_MESSAGE: 'OC-1'
+
+    #     # # Jira project filter
+    #     CF_JIRA_PROJECT_PREFIX: "OC"
+    #   uses: codefresh-io/codefresh-report-image@latest
+
+    - name: Push build information to Octopus Deploy 🐙
+      uses: OctopusDeploy/push-build-information-action@v3
+      with:
+        packages: |
+          twerthi/octopub-${{ inputs.service_directory }}-mysql
+        version: ${{ env.PACKAGE_VERSION }}
+        server: ${{ inputs.octopus_server_url }}
+        api_Key: ${{ inputs.octopus_api_key }}
+        space: ${{ inputs.octopus_space }}
