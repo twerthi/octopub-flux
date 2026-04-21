@@ -12,6 +12,6 @@ spec:
         kind: GitRepository
         name: octopub
         namespace: flux-system
-  valuesFiles:
-    - ./helm/octopub-frontend/values.yaml
+      valuesFiles:
+        - ./helm/octopub-frontend/values.yaml
   targetNamespace: development
